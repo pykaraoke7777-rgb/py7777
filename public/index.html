@@ -1,0 +1,199 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <title>P&Y 7777 Menu</title>
+    <link rel="preload" href="pages/page-01.jpg" as="image">
+    <style>
+      :root {
+        color-scheme: light;
+        --bg: #f8eddd;
+        --ink: #171717;
+        --muted: #705f49;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        height: 100%;
+        margin: 0;
+      }
+
+      body {
+        background: var(--bg);
+        color: var(--ink);
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        overflow: hidden;
+      }
+
+      .viewer {
+        height: 100dvh;
+        overflow-x: hidden;
+        overflow-y: auto;
+        scroll-behavior: smooth;
+        scroll-snap-type: y mandatory;
+        scrollbar-width: none;
+      }
+
+      .viewer::-webkit-scrollbar {
+        display: none;
+      }
+
+      .page {
+        align-items: center;
+        background: var(--bg);
+        display: flex;
+        height: 100dvh;
+        justify-content: center;
+        padding: max(10px, env(safe-area-inset-top)) 8px max(10px, env(safe-area-inset-bottom));
+        scroll-snap-align: start;
+        scroll-snap-stop: always;
+      }
+
+      .page img {
+        background: #fff7eb;
+        box-shadow: 0 10px 32px rgba(62, 42, 20, 0.18);
+        display: block;
+        height: auto;
+        max-height: calc(100dvh - 20px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+        max-width: min(100%, 760px);
+        object-fit: contain;
+        width: auto;
+      }
+
+      .counter {
+        background: rgba(255, 255, 255, 0.9);
+        border-radius: 8px;
+        bottom: max(12px, env(safe-area-inset-bottom));
+        box-shadow: 0 8px 24px rgba(62, 42, 20, 0.16);
+        color: var(--muted);
+        font-size: 13px;
+        font-weight: 700;
+        left: 50%;
+        min-width: 58px;
+        padding: 8px 10px;
+        position: fixed;
+        text-align: center;
+        transform: translateX(-50%);
+        z-index: 2;
+      }
+
+      .loader,
+      .error {
+        background: rgba(255, 255, 255, 0.9);
+        border-radius: 8px;
+        color: var(--muted);
+        font-size: 14px;
+        font-weight: 700;
+        padding: 14px 16px;
+      }
+    </style>
+  </head>
+  <body>
+    <main id="viewer" class="viewer" aria-label="P&Y 7777 Menu">
+      <section class="page">
+        <div class="loader">Dang tai menu...</div>
+      </section>
+    </main>
+    <div id="counter" class="counter">...</div>
+
+    <script>
+      const viewer = document.querySelector("#viewer");
+      const counter = document.querySelector("#counter");
+      let pages = [];
+
+      function updateCounter(pageNumber) {
+        counter.textContent = `${pageNumber}/${pages.length}`;
+      }
+
+      function loadPageImage(section) {
+        const img = section.querySelector("img[data-src]");
+        if (!img) return;
+
+        img.src = img.dataset.src;
+        img.removeAttribute("data-src");
+      }
+
+      function buildPage(page, index) {
+        const section = document.createElement("section");
+        section.className = "page";
+        section.dataset.page = String(page.page);
+
+        const image = document.createElement("img");
+        image.alt = `Menu page ${page.page}`;
+        image.width = page.width;
+        image.height = page.height;
+        image.loading = index < 2 ? "eager" : "lazy";
+        image.decoding = "async";
+
+        if (index < 2) {
+          image.src = page.src;
+        } else {
+          image.dataset.src = page.src;
+        }
+
+        section.append(image);
+        return section;
+      }
+
+      function observePages() {
+        const pageObserver = new IntersectionObserver(
+          (entries) => {
+            const visible = entries
+              .filter((entry) => entry.isIntersecting)
+              .sort((a, b) => b.intersectionRatio - a.intersectionRatio)[0];
+
+            if (visible) {
+              const pageNumber = Number(visible.target.dataset.page);
+              updateCounter(pageNumber);
+            }
+          },
+          { root: viewer, threshold: [0.55, 0.75, 0.9] }
+        );
+
+        const imageObserver = new IntersectionObserver(
+          (entries) => {
+            entries.forEach((entry) => {
+              if (entry.isIntersecting) {
+                loadPageImage(entry.target);
+                imageObserver.unobserve(entry.target);
+              }
+            });
+          },
+          { root: viewer, rootMargin: "160% 0px", threshold: 0.01 }
+        );
+
+        document.querySelectorAll(".page[data-page]").forEach((page) => {
+          pageObserver.observe(page);
+          imageObserver.observe(page);
+        });
+      }
+
+      async function init() {
+        try {
+          const response = await fetch("pages.json", { cache: "force-cache" });
+          if (!response.ok) throw new Error("Cannot load pages.json");
+
+          const manifest = await response.json();
+          pages = manifest.pages || [];
+          if (!pages.length) throw new Error("No pages found");
+
+          viewer.textContent = "";
+          pages.forEach((page, index) => viewer.append(buildPage(page, index)));
+          updateCounter(1);
+          observePages();
+        } catch (error) {
+          viewer.innerHTML = `<section class="page"><div class="error">Khong tai duoc menu</div></section>`;
+          counter.textContent = "";
+          console.error(error);
+        }
+      }
+
+      init();
+    </script>
+  </body>
+</html>
